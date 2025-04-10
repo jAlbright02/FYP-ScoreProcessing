@@ -7,7 +7,7 @@ router.post('/processFile', (req, res) => {
         return res.json({success: false})
     }
 
-    return res.json({success: true})
+    return res.json({success: true, score: 100})
 });
 
 module.exports = router;
