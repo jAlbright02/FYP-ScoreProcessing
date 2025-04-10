@@ -1,0 +1,18 @@
+{
+  "name": "fyp_scoreprocessing",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "nodemon app.js"
+  },
+  "author": "James Albright",
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  },
+  "dependencies": {
+    "body-parser": "^1.18.3",
+    "ejs": "^3.1.10",
+    "express": "^4.16.3",
+    "express-handlebars": "^8.0.1"
+  }
+}
