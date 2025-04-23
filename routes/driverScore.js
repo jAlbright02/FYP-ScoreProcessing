@@ -36,6 +36,12 @@ router.post('/processFile', (req, res) => {
         }
     }
 
+    //monitor the amount of infractions/good driving
+    let speedFaults = 0;
+    let rpmFaults = 0;
+    let loadFaults = 0;
+    let cleanDriving = 0;
+
     //set vals before looping
     let score = 100;
     let highRpmCount = 0;
@@ -58,6 +64,7 @@ router.post('/processFile', (req, res) => {
 
         //speed rules
         if (speedLimit > 0 && speed > speedLimit) {
+            speedFaults++;
             const excessSpeed = speed - speedLimit;
             
             //10% allowance for speeding
@@ -73,12 +80,14 @@ router.post('/processFile', (req, res) => {
         }
 
         //rpm rules
-        const rpmThreshold = (speed > 80) ? 3500 : 2500; //going onto a national? threshold increases 
+        const rpmThreshold = (speed > 80) ? 3000 : 2500; //going onto a national? threshold increases 
 
-        if (rpm > 7000) {
+        if (rpm > 5000) {
+            rpmFaults++;
             score -= 3; //immediate penalty for redlining
             highRpmCount = 0;
         } else if (rpm > rpmThreshold) {
+            rpmFaults++;
             highRpmCount++;
             //penalty for sustained high RPM
             if (highRpmCount >= 10) {
@@ -92,14 +101,16 @@ router.post('/processFile', (req, res) => {
         //engine load rules
         const loadThreshold = (speed > 60) ? 95 : 90;
 
-        if (engineLoad >= 100) {
+        if (engineLoad == 100) {
+            loadFaults++;
             score -= 0.5; //aggressive driving
             highLoadCount = 0;
         } else if (engineLoad > loadThreshold) {
+            loadFaults++;
             highLoadCount++;
             if (highLoadCount >= 8) {
                 score -= 0.3 * (highLoadCount - 7);
-                highLoadCount = 4; // Partial reset
+                highLoadCount = 4; //partial reset
             }
         } else {
             highLoadCount = Math.max(0, highLoadCount - 2); //account for gear changes
@@ -110,6 +121,7 @@ router.post('/processFile', (req, res) => {
             rpm < 2500 && 
             engineLoad < 80) {
             smoothDrivingCount++;
+            cleanDriving++;
             if (smoothDrivingCount >= 15) {
                 score = Math.min(100, score + 1);
                 smoothDrivingCount = 0;
@@ -128,10 +140,102 @@ router.post('/processFile', (req, res) => {
         ? Math.min(100, score * (1 + tripMinutes/120)) 
         : score; //if trip too short, just return base score
 
+    let advice = feedback(speedFaults, rpmFaults, loadFaults, cleanDriving);
+
     return res.json({ 
         success: true,
-        score: Math.max(0, Math.round(normalisedScore * 10) / 10)
+        score: Math.max(0, Math.round(normalisedScore * 10) / 10),
+        message: advice
     });
 });
+
+function feedback(nSpeed, nRPM, nLoad, nClean) {
+    let speedRes = [];
+    let rpmRes = [];
+    let loadRes = [];
+    let cleanRes = [];
+    switch (Math.round(nSpeed/10)*10) {
+        case 0:
+            speedRes.push('You have not broken any speed limits!');
+            break;
+        case 10:
+            speedRes.push(nSpeed, ' speeding infractions. Minor concern, please watch your speed.');
+            break;
+        case 20:
+            speedRes.push(nSpeed, ' speeding infractions. Pattern is emerging, be aware of your speed and the speed limits set in place for your safety.'); 
+            break;
+        case 30:
+            speedRes.push(nSpeed, ' speeding infractions. Please maintain a safe speed while driving.'); 
+            break;       
+        case 40:
+            speedRes.push(nSpeed, ' speeding infractions. You are frequently speeding, please be more mindful.'); 
+            break;
+        default:
+            speedRes.push(nSpeed, ' speeding infractions. Focus on the stated speed limit for the roads you are on.');
+            break;            
+    }
+
+    switch (Math.round(nRPM/10)*10) {
+        case 0:
+            rpmRes.push('You are treating the engine well, keep it up!');
+            break;
+        case 10:
+            rpmRes.push(nRPM, ' high RPM instances. Try shifting earlier to reduce wear / tear on the engine.');
+            break;
+        case 20:
+            rpmRes.push(nRPM, ' high RPM instances. Be aware of your revs during acceleration.'); 
+            break;
+        case 30:
+            rpmRes.push(nRPM, ' high RPM instances. Your driving style will lead to unnecessary engine wear over time.'); 
+            break;       
+        case 40:
+            rpmRes.push(nRPM, ' high RPM instances. Your revs are consistently too high, adjust your driving to protect the engine.'); 
+            break;
+        default:
+            rpmRes.push(nRPM, ' high RPM instances. Driving like this will damage your engine and shorten its life span.');
+            break;            
+    }
+    switch (Math.round(nLoad/10)*10) {
+        case 0:
+            loadRes.push('No aggressive driving detected.');
+            break;
+        case 10:
+            loadRes.push(nLoad, ' engine load infractions. Avoid pushing the engine unless needed.'); 
+            break;
+        case 20:
+            loadRes.push(nLoad, ' engine load infractions. Be mindful of how you are treating the engine.'); 
+            break;
+        case 30:
+            loadRes.push(nLoad, ' engine load infractions. Avoid steep inclines if possible or keep speed while doing so.'); 
+            break;       
+        case 40:
+            loadRes.push(nLoad, ' engine load infractions. You might be overloading the engine, which can cause long term damage.'); 
+            break;
+        default:
+            loadRes.push(nLoad, ' engine load infractions. Consider driving less aggressively or reconsider your route if it is hilly.'); 
+            break;            
+    }
+    switch (Math.round(nClean/10)*10) {
+        case 0:
+            cleanRes.push('Drive smoothly and watch your speed.');
+            break;
+        case 10:
+            cleanRes.push(nClean, ' instances of logged smooth driving. Keep it up!'); 
+            break;
+        case 20:
+            cleanRes.push(nClean, ' instances of logged smooth driving. You are maintaining a good balance.'); 
+            break;
+        case 30:
+            cleanRes.push(nClean, ' instances of logged smooth driving. Good job, you have consistently driven well.'); 
+            break;       
+        case 40:
+            cleanRes.push(nClean, ' instances of logged smooth driving. Excellent driving, this is showing good driving habits'); 
+            break;
+        default:
+            cleanRes.push(nClean, ' instances of logged smooth driving. Amazing! This is the model of efficient driving');
+            break;            
+    }
+    return [speedRes, rpmRes, loadRes, cleanRes];
+}
 
 module.exports = router;
